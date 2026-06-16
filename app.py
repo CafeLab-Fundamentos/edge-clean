@@ -2,6 +2,7 @@ import logging
 import os
 
 from flask import Flask, jsonify
+from dotenv import load_dotenv
 
 from iam.application.services import IamApplicationService
 from iam.interfaces.services import iam_api
@@ -9,6 +10,9 @@ from iotmonitoring.interfaces.account_services import onboarding_api
 from iotmonitoring.interfaces.services import iotmonitoring_api
 from shared.infrastructure.database import init_db
 from shared.infrastructure.sync_worker import worker as sync_worker
+
+# Load local .env overrides before resolving runtime configuration.
+load_dotenv()
 
 # Emit INFO logs (sync pushes/pulls) to stderr -> systemd journal.
 # Override with EDGE_LOG_LEVEL=DEBUG/WARNING.
