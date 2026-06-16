@@ -206,7 +206,7 @@ ONBOARDING_HTML = """<!doctype html>
   <p class="help">Estado `pendiente`: el dispositivo ya llego al edge, pero todavia no tiene un lote asignado. Estado `asignado`: ya tiene lote y puede sincronizar con el backend.</p>
   <button id="refresh" type="button">Actualizar lista</button>
   <table id="devices">
-    <thead><tr><th>Dispositivo</th><th>Visto</th><th>Lecturas</th><th>Lote</th></tr></thead>
+    <thead><tr><th>Dispositivo</th><th>Visto</th><th>Lecturas locales</th><th>Lote</th></tr></thead>
     <tbody></tbody>
   </table>
   <p id="dmsg" class="msg"></p>
