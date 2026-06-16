@@ -27,6 +27,21 @@ reading_repository = SensorReadingRepository()
 DEFAULT_BACKEND_URL = "http://localhost:8080"
 
 
+def _normalize_lot_id(value) -> str | None:
+    if value is None:
+        return None
+    normalized = str(value).strip()
+    if not normalized or normalized.lower() in {"null", "none"}:
+        return None
+    return normalized
+
+
+def _read_backend_lot_id(lot: dict) -> str | None:
+    return _normalize_lot_id(
+        lot.get("id") or lot.get("coffeeLotId") or lot.get("coffee_lot_id")
+    )
+
+
 def _format_dt(value) -> str | None:
     if value is None:
         return None
@@ -39,10 +54,11 @@ def _format_dt(value) -> str | None:
 
 def _device_view(device) -> dict:
     latest = reading_repository.find_latest_by_device_id(device.device_id)
+    normalized_lot_id = _normalize_lot_id(device.lot_id)
     return {
         "deviceId": device.device_id,
-        "lotId": device.lot_id,
-        "assigned": device.lot_id is not None,
+        "lotId": normalized_lot_id,
+        "assigned": normalized_lot_id is not None,
         "readingCount": reading_repository.count_by_device(device.device_id),
         "lastSeenAt": _format_dt(latest.recorded_at) if latest else None,
     }
@@ -111,7 +127,7 @@ def list_lots():
 
     simplified = [
         {
-            "id": lot.get("id"),
+            "id": _read_backend_lot_id(lot),
             "lotName": lot.get("lotName") or lot.get("lot_name"),
             "coffeeType": lot.get("coffeeType") or lot.get("coffee_type"),
             "status": lot.get("status"),
@@ -124,8 +140,8 @@ def list_lots():
 @onboarding_api.route("/api/v1/edge/devices/<device_id>/assign", methods=["POST"])
 def assign_lot(device_id):
     data = request.get_json(silent=True) or {}
-    lot_id = data.get("lotId") or data.get("lot_id")
-    if lot_id in (None, ""):
+    lot_id = _normalize_lot_id(data.get("lotId") or data.get("lot_id"))
+    if lot_id is None:
         return jsonify({"error": "lotId es requerido"}), 400
 
     try:

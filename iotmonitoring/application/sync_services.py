@@ -40,6 +40,8 @@ class TelemetrySyncService:
         device = self.device_repository.find_by_id(device_id)
         if device is None or device.lot_id is None:
             return None
+        if str(device.lot_id).strip().lower() in {"", "null", "none"}:
+            return None
         try:
             return int(device.lot_id)
         except (TypeError, ValueError):
