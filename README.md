@@ -1,24 +1,34 @@
-# edge-clean
+# Capa Edge
 
-Edge local de CafeLab para el flujo real entre dispositivo IoT, edge y backend.
+Capa Edge de CafeLab para el flujo operativo entre Tracksilo y Microservicios.
 
-- `app.py`
-- `iam/`
-- `iotmonitoring/`
-- `shared/`
-- `firmware/tracksilo-esp32/`
+## Secuencia de uso
+Teniendo una cuenta, un perfil, un proveedor y un lote creados...
 
+1) Ejecutar el **Edge** desde su terminal con `python app.py`.
 
-## Flujo real validado
+2) Abrir `http://127.0.0.1:5000/onboarding` y colocar el correo y contraseña de la cuenta que se quiere vincular así como la URL del **API Gateway** `https://cafelab-api-gateway-abc123`. Así, el **Edge** hace Sign-In y se vincula a la cuenta del **API gateway**.
 
-1. El ESP32 se anuncia al edge con `POST /api/v1/iam/devices/announce`.
+3) Encender/conectar por cable a **Tracksilo**.
+
+4) Conectar un dispositivo (ejm. un celular) a la señal WiFi `TrackSilo-Setup` y abrir `192.168.4.1` para después seleccionar la red WiFi en que está actualmente el **Edge** corriendo y pasarle las credenciales. 
+
+5) Esperar a que **Tracksilo** aparezca en estado `pendiente` en `http://127.0.0.1:5000/onboarding`.
+
+6) Asignarle un lote con el botón de asignación y esperar a que **Tracksilo** aparezca en estado "asignado".
+
+7) En el **Edge**, confirmas logs 201: Pulled thresholds y Pushed readings. Mientras que en el microservicio **IoT Monitoring**, confirmas con GET /telemetry-records/coffee-lot/{id}.
+
+## Flujo real
+
+1. **Tracksilo** se anuncia al **Edge** con `POST /api/v1/iam/devices/announce`.
 2. El usuario vincula su cuenta en `/onboarding`.
-3. El edge consulta los lotes del backend por el API Gateway.
+3. El **Edge** consulta los lotes del microservicio **Management** mediante el **API Gateway**.
 4. El usuario asigna un `coffeeLotId` al dispositivo desde `/onboarding`.
-5. El ESP32 envia lecturas al edge con `POST /api/v1/edge/readings`.
-6. El edge responde alertas locales al instante.
-7. El worker sincroniza pendientes a `POST /api/v1/telemetry-records`.
-8. El worker baja umbrales desde `GET /api/v1/environment-thresholds/coffee-lot/{coffeeLotId}`.
+5. **Tracksilo** envia lecturas al **Edge** con `POST /api/v1/edge/readings`.
+6. El **Edge** responde alertas locales al instante.
+7. El worker sincroniza lecturas pendientes al microservicio **IoT Monitoring** `POST /api/v1/telemetry-records`.
+8. El worker descarga los últimos umbrales desde `GET /api/v1/environment-thresholds/coffee-lot/{coffeeLotId}`.
 
 ## Ejecutar local
 
