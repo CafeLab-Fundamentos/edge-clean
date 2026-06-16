@@ -27,8 +27,8 @@ Teniendo una cuenta, un perfil, un proveedor y un lote creados...
 4. El usuario asigna un `coffeeLotId` al dispositivo desde `/onboarding`.
 5. **Tracksilo** envia lecturas al **Edge** con `POST /api/v1/edge/readings`.
 6. El **Edge** responde alertas locales al instante.
-7. El worker sincroniza lecturas pendientes al microservicio **IoT Monitoring** `POST /api/v1/telemetry-records`.
-8. El worker descarga los últimos umbrales desde `GET /api/v1/environment-thresholds/coffee-lot/{coffeeLotId}`.
+7. El worker toma las lecturas locales guardadas en SQLite y las empuja al microservicio **IoT Monitoring** `POST /api/v1/telemetry-records`.
+8. El worker descarga periódicamente los umbrales desde `GET /api/v1/environment-thresholds/coffee-lot/{coffeeLotId}`.
 
 ## Ejecutar local
 
@@ -50,6 +50,48 @@ edge_clean.db
 ```
 
 El proyecto carga variables desde `.env`. En este flujo, la principal es del api gateway
+
+## Probar Frontend sin Tracksilo
+
+No hace falta tener a **Tracksilo** para probar el onboarding o las pantallas del edge.
+
+En el primer request del edge se crea automaticamente un dispositivo de desarrollo:
+
+- `deviceId`: `tracksilo-001`
+- `X-API-Key`: `test-api-key-123`
+
+Eso ocurre cuando `app.py` inicializa la base y llama a `IamApplicationService().get_or_create_development_device()`.
+
+Flujo recomendado para probar frontend sin hardware:
+
+1. Ejecuta `python app.py`
+2. Abre `http://127.0.0.1:5000/onboarding`
+3. Vincula una cuenta real del backend
+4. Asigna un lote a `tracksilo-001`
+5. Inserta lecturas manuales contra el edge para que la UI tenga datos
+
+Ejemplo con PowerShell:
+
+```powershell
+Invoke-RestMethod `
+  -Uri "http://127.0.0.1:5000/api/v1/edge/readings" `
+  -Method Post `
+  -ContentType "application/json" `
+  -Headers @{ "X-API-Key" = "test-api-key-123" } `
+  -Body '{
+    "deviceId": "tracksilo-001",
+    "temperature": 24.5,
+    "humidity": 75.0
+  }'
+```
+
+Con eso se puede validar la UI de:
+
+- dispositivos pendientes o asignados
+- contador de lecturas locales
+- estado del sensor
+- alertas de humedad y temperatura
+- sincronizacion hacia backend
 
 ## Endpoints principales del edge
 
