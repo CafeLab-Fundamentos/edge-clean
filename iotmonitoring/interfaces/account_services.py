@@ -69,7 +69,6 @@ def get_account():
     account = BackendAccountRepository.get()
     if account is None:
         return jsonify({"configured": False}), 200
-    # Nunca devolvemos la contraseña.
     return jsonify({
         "configured": True,
         "email": account.email,
@@ -91,17 +90,15 @@ def set_account():
     if not email or not password:
         return jsonify({"error": "email y password son requeridos"}), 400
 
-    # Valida las credenciales contra el backend ANTES de guardarlas.
     client = BackendClient(BackendConfig(base_url=backend_url, service_email=email, service_password=password))
     try:
         client.sign_in()
     except BackendAuthError:
-        return jsonify({"error": "Credenciales inválidas"}), 401
+        return jsonify({"error": "Credenciales invalidas"}), 401
     except BackendUnavailableError as error:
         return jsonify({"error": f"No se pudo contactar el backend: {error}"}), 502
 
     BackendAccountRepository.save(backend_url, email, password)
-    # Arranca/reinicia el worker para que tome las credenciales recién guardadas.
     sync_worker.start()
 
     return jsonify({"configured": True, "email": email, "backendUrl": backend_url}), 200
@@ -109,7 +106,6 @@ def set_account():
 
 @onboarding_api.route("/api/v1/edge/devices", methods=["GET"])
 def list_devices():
-    """Devices that have announced themselves (phone-home), for the UI."""
     devices = [_device_view(d) for d in iam_service.get_all_devices()]
     devices.sort(key=lambda d: (d["assigned"], d["deviceId"]))
     return jsonify({"devices": devices}), 200
@@ -117,9 +113,8 @@ def list_devices():
 
 @onboarding_api.route("/api/v1/edge/lots", methods=["GET"])
 def list_lots():
-    """Available coffee lots from the backend, to populate the assign dropdown."""
     if BackendAccountRepository.get() is None:
-        return jsonify({"error": "El edge no está vinculado a una cuenta"}), 409
+        return jsonify({"error": "El edge no esta vinculado a una cuenta"}), 409
     try:
         lots = BackendClient().get_coffee_lots()
     except BackendError as error:
@@ -149,14 +144,12 @@ def assign_lot(device_id):
     except ValueError:
         return jsonify({"error": "Dispositivo no encontrado"}), 404
 
-    # Push the buffered readings now that the device maps to a coffee lot.
     sync_worker.notify()
     return jsonify(_device_view(device)), 200
 
 
 @onboarding_api.route("/api/v1/edge/devices/reset", methods=["POST"])
 def reset_devices():
-    """Wipe registered IoT devices and their telemetry (keeps the account)."""
     deleted = iam_service.reset_devices()
     SensorReadingRepository.delete_all()
     ActuatorEventRepository.delete_all()
@@ -169,16 +162,17 @@ ONBOARDING_HTML = """<!doctype html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>CafeLab Edge — Configuración</title>
+  <title>CafeLab Edge - Configuracion</title>
   <style>
-    body { font-family: system-ui, sans-serif; max-width: 40em; margin: 2em auto; padding: 0 1em; }
+    body { font-family: system-ui, sans-serif; max-width: 44em; margin: 2em auto; padding: 0 1em; }
     h2 { margin-top: 2em; border-top: 1px solid #ddd; padding-top: 1em; }
     label { display: block; margin: .8em 0 .2em; font-weight: 600; }
     input, select { width: 100%; padding: .5em; box-sizing: border-box; }
     button { margin-top: .8em; padding: .6em 1em; cursor: pointer; }
     .full { width: 100%; }
     .msg { margin-top: 1em; }
-    .ok { color: #137333; } .err { color: #b00020; }
+    .ok { color: #137333; }
+    .err { color: #b00020; }
     table { width: 100%; border-collapse: collapse; margin-top: 1em; }
     th, td { text-align: left; padding: .4em .3em; border-bottom: 1px solid #eee; font-size: .9em; vertical-align: middle; }
     .pill { font-size: .75em; padding: .1em .5em; border-radius: 1em; }
@@ -187,17 +181,19 @@ ONBOARDING_HTML = """<!doctype html>
     .row-actions { display: flex; gap: .4em; align-items: center; }
     .danger { color: #b00020; border-color: #b00020; }
     .muted { color: #777; font-size: .85em; }
+    .help { margin: .4em 0 1em; color: #555; font-size: .9em; }
+    .device-note { display: block; color: #666; font-size: .8em; margin-top: .25em; }
   </style>
 </head>
 <body>
-  <h1>Configuración del edge</h1>
+  <h1>Configuración de Tracksilo</h1>
 
   <h2>1. Vincular a tu cuenta</h2>
-  <p id="acct" class="msg muted">Verificando cuenta…</p>
+  <p id="acct" class="msg muted">Verificando cuenta...</p>
   <form id="f">
     <label>Email</label>
     <input id="email" type="email" required>
-    <label>Contraseña</label>
+    <label>Contrasena</label>
     <input id="password" type="password" required>
     <label>URL del backend</label>
     <input id="backendUrl" type="url" placeholder="http://192.168.1.100:8080">
@@ -206,15 +202,16 @@ ONBOARDING_HTML = """<!doctype html>
   <p id="msg" class="msg"></p>
 
   <h2>2. Dispositivos detectados</h2>
-  <p class="muted">Los IoT que se anuncian en la red local aparecen aquí. Asígnale
-    a cada uno un lote para que sus lecturas se sincronicen.</p>
-  <button id="refresh" type="button">Actualizar</button>
+  <p class="muted">Los IoT que se anuncian en la red local aparecen aqui. Asignale a cada uno un lote para que sus lecturas se sincronicen.</p>
+  <p class="help">Estado `pendiente`: el dispositivo ya llego al edge, pero todavia no tiene un lote asignado. Estado `asignado`: ya tiene lote y puede sincronizar con el backend.</p>
+  <button id="refresh" type="button">Actualizar lista</button>
   <table id="devices">
     <thead><tr><th>Dispositivo</th><th>Visto</th><th>Lecturas</th><th>Lote</th></tr></thead>
     <tbody></tbody>
   </table>
   <p id="dmsg" class="msg"></p>
-  <button id="reset" type="button" class="danger">Borrar dispositivos (reset IoT)</button>
+  <p class="help">`Actualizar lista` vuelve a consultar dispositivos y lotes del backend. `Borrar dispositivos locales y lecturas` limpia del edge los dispositivos anunciados, sus lecturas y sus umbrales locales, pero mantiene la cuenta vinculada.</p>
+  <button id="reset" type="button" class="danger">Borrar dispositivos locales y lecturas</button>
 
   <script>
     const $ = (id) => document.getElementById(id);
@@ -223,7 +220,8 @@ ONBOARDING_HTML = """<!doctype html>
 
     $('f').addEventListener('submit', async (e) => {
       e.preventDefault();
-      msg.textContent = 'Validando...'; msg.className = 'msg';
+      msg.textContent = 'Validando...';
+      msg.className = 'msg';
       const body = {
         email: $('email').value,
         password: $('password').value,
@@ -231,13 +229,24 @@ ONBOARDING_HTML = """<!doctype html>
       };
       try {
         const r = await fetch('/api/v1/edge/account', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(body),
         });
         const data = await r.json();
-        if (r.ok) { msg.textContent = 'Cuenta vinculada: ' + data.email; msg.className = 'msg ok'; loadAccount(); loadDevices(); }
-        else { msg.textContent = 'Error: ' + (data.error || r.status); msg.className = 'msg err'; }
-      } catch (err) { msg.textContent = 'Error de red: ' + err; msg.className = 'msg err'; }
+        if (r.ok) {
+          msg.textContent = 'Cuenta vinculada: ' + data.email;
+          msg.className = 'msg ok';
+          loadAccount();
+          loadDevices();
+        } else {
+          msg.textContent = 'Error: ' + (data.error || r.status);
+          msg.className = 'msg err';
+        }
+      } catch (err) {
+        msg.textContent = 'Error de red: ' + err;
+        msg.className = 'msg err';
+      }
     });
 
     async function loadAccount() {
@@ -252,14 +261,16 @@ ONBOARDING_HTML = """<!doctype html>
           if (data.email) $('email').value = data.email;
           if (data.backendUrl) $('backendUrl').value = data.backendUrl;
         } else {
-          acct.textContent = 'No hay ninguna cuenta vinculada todavía.';
+          acct.textContent = 'No hay ninguna cuenta vinculada todavia.';
           acct.className = 'msg muted';
         }
-      } catch (e) { $('acct').textContent = ''; }
+      } catch (e) {
+        $('acct').textContent = '';
+      }
     }
 
     function lotOptions(selected) {
-      const opts = ['<option value="">— sin asignar —</option>'];
+      const opts = ['<option value="">- sin asignar -</option>'];
       for (const lot of lots) {
         const label = `#${lot.id} · ${lot.lotName || ''} (${lot.coffeeType || ''})`;
         const sel = String(lot.id) === String(selected) ? ' selected' : '';
@@ -274,11 +285,14 @@ ONBOARDING_HTML = """<!doctype html>
         const data = await r.json();
         lots = r.ok ? (data.lots || []) : [];
         if (!r.ok) dmsg.textContent = 'Lotes: ' + (data.error || r.status);
-      } catch (e) { lots = []; }
+      } catch (e) {
+        lots = [];
+      }
     }
 
     async function loadDevices() {
-      dmsg.textContent = ''; dmsg.className = 'msg';
+      dmsg.textContent = '';
+      dmsg.className = 'msg';
       await loadLots();
       const r = await fetch('/api/v1/edge/devices');
       const data = await r.json();
@@ -286,37 +300,54 @@ ONBOARDING_HTML = """<!doctype html>
       tbody.innerHTML = '';
       for (const d of (data.devices || [])) {
         const tr = document.createElement('tr');
-        const seen = d.lastSeenAt ? new Date(d.lastSeenAt).toLocaleString() : '—';
+        const seen = d.lastSeenAt ? new Date(d.lastSeenAt).toLocaleString() : '-';
         const pill = d.assigned
           ? '<span class="pill ok">asignado</span>'
           : '<span class="pill pend">pendiente</span>';
+        const stateNote = d.assigned
+          ? `Lote actual: #${d.lotId}`
+          : 'Falta asignarle un lote para que sincronice con el backend';
+        const actionLabel = d.assigned ? 'Guardar cambio de lote' : 'Asignar lote';
         tr.innerHTML =
-          `<td>${d.deviceId}<br>${pill}</td>` +
+          `<td>${d.deviceId}<br>${pill}<span class="device-note">${stateNote}</span></td>` +
           `<td>${seen}</td>` +
           `<td>${d.readingCount}</td>` +
           `<td><div class="row-actions">` +
           `<select>${lotOptions(d.lotId)}</select>` +
-          `<button type="button">Asignar</button></div></td>`;
+          `<button type="button">${actionLabel}</button></div></td>`;
         const select = tr.querySelector('select');
         tr.querySelector('button').addEventListener('click', () => assign(d.deviceId, select.value));
         tbody.appendChild(tr);
       }
-      if (!(data.devices || []).length) tbody.innerHTML = '<tr><td colspan="4" class="muted">Aún no se anuncia ningún dispositivo.</td></tr>';
+      if (!(data.devices || []).length) {
+        tbody.innerHTML = '<tr><td colspan="4" class="muted">Aun no se anuncia ningun dispositivo.</td></tr>';
+      }
     }
 
     async function assign(deviceId, lotId) {
-      if (!lotId) { dmsg.textContent = 'Elige un lote primero.'; dmsg.className = 'msg err'; return; }
+      if (!lotId) {
+        dmsg.textContent = 'Elige un lote primero.';
+        dmsg.className = 'msg err';
+        return;
+      }
       const r = await fetch(`/api/v1/edge/devices/${encodeURIComponent(deviceId)}/assign`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ lotId }),
       });
       const data = await r.json();
-      if (r.ok) { dmsg.textContent = `${deviceId} → lote ${data.lotId}`; dmsg.className = 'msg ok'; loadDevices(); }
-      else { dmsg.textContent = 'Error: ' + (data.error || r.status); dmsg.className = 'msg err'; }
+      if (r.ok) {
+        dmsg.textContent = `${deviceId} quedo asignado al lote ${data.lotId}.`;
+        dmsg.className = 'msg ok';
+        loadDevices();
+      } else {
+        dmsg.textContent = 'Error: ' + (data.error || r.status);
+        dmsg.className = 'msg err';
+      }
     }
 
     $('reset').addEventListener('click', async () => {
-      if (!confirm('¿Borrar TODOS los dispositivos IoT y sus lecturas? La cuenta se mantiene.')) return;
+      if (!confirm('¿Borrar todos los dispositivos IoT, sus lecturas y sus umbrales locales? La cuenta vinculada se mantiene.')) return;
       const r = await fetch('/api/v1/edge/devices/reset', { method: 'POST' });
       const data = await r.json();
       dmsg.textContent = r.ok ? `Borrados ${data.devicesDeleted} dispositivo(s).` : ('Error: ' + (data.error || r.status));

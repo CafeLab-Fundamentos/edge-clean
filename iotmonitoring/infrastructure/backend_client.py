@@ -46,6 +46,8 @@ class BackendClient:
     def __init__(self, config: BackendConfig | None = None):
         self.config = config or BackendConfig.resolve()
         self._token: str | None = None
+        self._user_id: int | None = None
+        self._profile_id: int | None = None
         self._lock = threading.Lock()
 
     def _url(self, path: str) -> str:
@@ -69,13 +71,58 @@ class BackendClient:
                 f"sign-in rejected ({response.status_code}): {response.text}"
             )
 
-        token = (response.json() or {}).get("token")
+        payload = response.json() or {}
+        token = payload.get("token")
         if not token:
             raise BackendAuthError("sign-in response did not contain a token")
 
+        raw_user_id = payload.get("id") or payload.get("userId")
+        if raw_user_id in (None, ""):
+            raise BackendAuthError("sign-in response did not contain a user id")
+        try:
+            user_id = int(raw_user_id)
+        except (TypeError, ValueError):
+            raise BackendAuthError(f"sign-in response returned a non-numeric user id: {raw_user_id!r}")
+
         with self._lock:
             self._token = token
+            self._user_id = user_id
         return token
+
+    def _profile_user_id(self) -> int:
+        with self._lock:
+            profile_id = self._profile_id
+        if profile_id is not None:
+            return profile_id
+
+        email = self.config.service_email
+        if not email:
+            raise BackendAuthError("service account email is missing")
+
+        response = self._request("GET", "/api/v1/profiles", params={"email": email})
+        if response.status_code != 200:
+            if 400 <= response.status_code < 500:
+                raise BackendRejectedError(
+                    f"profile lookup rejected ({response.status_code}): {response.text}"
+                )
+            raise BackendUnavailableError(
+                f"profile lookup failed ({response.status_code}): {response.text}"
+            )
+
+        payload = response.json() or {}
+        raw_profile_id = payload.get("id") or payload.get("userId")
+        if raw_profile_id in (None, ""):
+            raise BackendAuthError("profile lookup did not return a profile id")
+        try:
+            profile_id = int(raw_profile_id)
+        except (TypeError, ValueError):
+            raise BackendAuthError(
+                f"profile lookup returned a non-numeric profile id: {raw_profile_id!r}"
+            )
+
+        with self._lock:
+            self._profile_id = profile_id
+        return profile_id
 
     def _auth_headers(self) -> dict:
         with self._lock:
@@ -133,7 +180,8 @@ class BackendClient:
 
     def get_coffee_lots(self) -> list:
         """List the coffee lots owned by the service account (for lot assignment)."""
-        response = self._request("GET", "/api/v1/coffee-lots")
+        profile_id = self._profile_user_id()
+        response = self._request("GET", f"/api/v1/coffee-lots/user/{profile_id}")
         if response.status_code == 200:
             return response.json() or []
         if 400 <= response.status_code < 500:
