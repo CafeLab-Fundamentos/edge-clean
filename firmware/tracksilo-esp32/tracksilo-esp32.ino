@@ -46,17 +46,17 @@ static const char* DEVICE_PREFIX      = "esp32-";
 // ESP32 (queryHost suele fallar); el edge lo anuncia vía Avahi en el Pi.
 static const char* EDGE_SERVICE     = "cafelab";        // => _cafelab._tcp (avahi del Pi)
 static const char* EDGE_HOST        = "raspberrypi";    // hostname mDNS (sin ".local")
-static const char* EDGE_FALLBACK_IP = "192.168.18.129"; // respaldo si mDNS falla (deja vacío para solo-mDNS)
+static const char* EDGE_FALLBACK_IP = "10.47.64.145"; // respaldo si mDNS falla (deja vacío para solo-mDNS)
 static const uint16_t EDGE_PORT     = 5000;
 
-static const uint8_t DHT_PIN      = 4;               // dato del DHT22
+static const uint8_t DHT_PIN      = 15;               // dato del DHT22
 static const uint8_t DHT_KIND     = DHT22;
 // Dos actuadores independientes: el edge responde humidityAlert y temperatureAlert
 // (cada uno true cuando la variable esta fuera de rango: > max o < min).
 static const uint8_t HUMIDITY_ACTUATOR_PIN    = 18;  // p.ej. deshumidificador
 static const uint8_t TEMPERATURE_ACTUATOR_PIN = 19;  // p.ej. enfriador/calefactor
 
-static const unsigned long READ_INTERVAL_MS = 30000; // 30 s (< 2 min => sensor ONLINE)
+static const unsigned long READ_INTERVAL_MS = 5000; // 5 s (< 2 min => sensor ONLINE)
 // =====================================================================================
 
 DHT dht(DHT_PIN, DHT_KIND);
@@ -82,7 +82,7 @@ IPAddress resolveEdge() {
   for (int attempt = 0; attempt < 3; attempt++) {
     int n = MDNS.queryService(EDGE_SERVICE, "tcp");
     if (n > 0) {
-      IPAddress ip = MDNS.IP(0);
+      IPAddress ip = MDNS.address(0);
       Serial.printf("[mdns] edge por servicio '%s': %s:%u (%s)\n",
                     EDGE_SERVICE, ip.toString().c_str(), MDNS.port(0),
                     MDNS.hostname(0).c_str());
@@ -227,6 +227,7 @@ void setup() {
 
   // WiFiManager: conecta con WiFi guardado, o abre el portal "TrackSilo-Setup".
   WiFiManager wm;
+  //wm.resetSettings(); // TEMPORAL: solo para volver a configurar WiFi
   if (!wm.autoConnect("TrackSilo-Setup")) {
     Serial.println("[wifi] fallo de conexion; reiniciando...");
     delay(3000);
